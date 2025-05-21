@@ -250,6 +250,18 @@ export const DEX_PROGRAMS = {
   },
 };
 
+// Create a Map version of DEX_PROGRAMS for efficient lookups by ID
+export const DEX_PROGRAMS_MAP = new Map(
+  Object.values(DEX_PROGRAMS).map((dex) => [dex.id, dex])
+);
+
+// Create a Set of ignored program IDs (vaults) for efficient lookups
+export const IGNORED_PROGRAM_IDS_SET = new Set(
+  Object.values(DEX_PROGRAMS)
+    .filter((dex) => dex.tags.includes('vault'))
+    .map((dex) => dex.id)
+);
+
 export const DEX_PROGRAM_IDS = Object.values(DEX_PROGRAMS).map((dex) => dex.id);
 
 export const SYSTEM_PROGRAMS = [

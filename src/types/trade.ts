@@ -35,7 +35,7 @@ export interface ParseConfig {
    * If true, will throw an error if parsing fails
    * @default false
    */
-  thorwError?: boolean;
+  throwError?: boolean;
 }
 
 /**

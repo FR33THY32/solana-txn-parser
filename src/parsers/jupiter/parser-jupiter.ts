@@ -10,8 +10,9 @@ export class JupiterParser extends BaseParser {
     const trades: TradeInfo[] = [];
 
     this.classifiedInstructions.forEach(({ instruction, programId, outerIndex, innerIndex }) => {
-      if (this.isJupiterRouteEventInstruction(instruction, programId)) {
-        const event = this.parseJupiterRouteEventInstruction(instruction, `${outerIndex}-${innerIndex ?? 0}`);
+      const routeEventDataBuffer = this.getAndValidateJupiterRouteEventData(instruction, programId);
+      if (routeEventDataBuffer) {
+        const event = this.parseJupiterRouteEventFromData(routeEventDataBuffer, `${outerIndex}-${innerIndex ?? 0}`);
         if (event) {
           const data = this.processSwapData([event]);
           if (data) {
@@ -32,15 +33,17 @@ export class JupiterParser extends BaseParser {
     const data = getInstructionData(instruction);
     if (!data || data.length < 16) return false;
 
-    return Buffer.from(data.slice(0, 16)).equals(Buffer.from(DISCRIMINATORS.JUPITER.ROUTE_EVENT));
+    if (Buffer.from(data.slice(0, 16)).equals(Buffer.from(DISCRIMINATORS.JUPITER.ROUTE_EVENT))) {
+      return data; // Return the decoded data buffer
+    }
+    return null;
   }
 
-  private parseJupiterRouteEventInstruction(instruction: any, idx: string): JupiterSwapEventData | null {
+  // Renamed and modified to accept the already decoded/validated data buffer
+  private parseJupiterRouteEventFromData(routeEventDataBuffer: Buffer, idx: string): JupiterSwapEventData | null {
     try {
-      const data = getInstructionData(instruction);
-      if (!data || data.length < 16) return null;
-
-      const eventData = data.slice(16);
+      // Data validation (length) already done in getAndValidateJupiterRouteEventData
+      const eventData = routeEventDataBuffer.slice(16); // Use the passed buffer
       const layout = deserializeUnchecked(JupiterSwapLayout.schema, JupiterSwapLayout, Buffer.from(eventData));
       const swapEvent = layout.toSwapEvent();
 

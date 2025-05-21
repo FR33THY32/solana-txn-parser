@@ -83,9 +83,10 @@ describe('Liquidity', () => {
   let connection: Connection;
   beforeAll(async () => {
     // Initialize connection
-    const rpcUrl = process.env.SOLANA_RPC_URL;
+    let rpcUrl = process.env.SOLANA_RPC_URL;
     if (!rpcUrl) {
-      throw new Error('SOLANA_RPC_URL environment variable is not set');
+      console.warn('SOLANA_RPC_URL environment variable is not set for liquidity-raydium-cpmm.test.ts. Using a public RPC. This may lead to rate limiting or instability.');
+      rpcUrl = 'https://api.mainnet-beta.solana.com';
     }
     connection = new Connection(rpcUrl);
   });

@@ -10,9 +10,12 @@ describe('Dex Parser', () => {
   let fetchTime = 0, processTime = 0;
   beforeAll(async () => {
     // Initialize connection
-    const rpcUrl = process.env.SOLANA_RPC_URL;
+    let rpcUrl = process.env.SOLANA_RPC_URL;
     if (!rpcUrl) {
-      throw new Error('SOLANA_RPC_URL environment variable is not set');
+      console.warn('SOLANA_RPC_URL environment variable is not set for parser.test.ts. Using a public RPC. This may lead to rate limiting or instability.');
+      rpcUrl = 'https://api.mainnet-beta.solana.com';
+      // Alternatively, throw an error if a specific RPC is strictly required:
+      // throw new Error('SOLANA_RPC_URL environment variable is not set');
     }
     connection = new Connection(rpcUrl, {
       commitment: 'confirmed',
@@ -55,18 +58,24 @@ describe('Dex Parser', () => {
           fetchTime += s2 - s1;
           const s3 = Date.now();
 
-          const trades = parser.parseTrades(tx);
+          // Use parseAll to be able to check ParseResult state and msg
+          const result = parser.parseAll(tx);
 
           const s4 = Date.now();
           processTime += s4 - s3;
           // console.log('fetchTime', fetchTime);
           // console.log('processTime', processTime);
-          // console.log('trades', trades);
-          expect(trades.length).toBeGreaterThanOrEqual(1);
-          expectItem(trades[0], test);
+          // console.log('result', JSON.stringify(result, null, 2));
+
+          // For successful test cases in parser.test.case.ts, state should be true
+          expect(result.state).toBe(true);
+          expect(result.msg).toBeUndefined(); // No error message expected
+
+          expect(result.trades.length).toBeGreaterThanOrEqual(1);
+          expectItem(result.trades[0], test);
           if (test.items) {
-            expect(trades.length).toBeGreaterThan(1);
-            expectItem(trades[1], test.items[0]);
+            expect(result.trades.length).toBeGreaterThan(1);
+            expectItem(result.trades[1], test.items[0]);
           }
 
         });
