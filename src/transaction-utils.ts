@@ -1,4 +1,4 @@
-import { DEX_PROGRAMS, SYSTEM_PROGRAMS, TOKENS } from './constants';
+import { DEX_PROGRAMS, DEX_PROGRAMS_MAP, IGNORED_PROGRAM_IDS_SET, SYSTEM_PROGRAMS, TOKENS } from './constants';
 import { InstructionClassifier } from './instruction-classifier';
 import { TransactionAdapter } from './transaction-adapter';
 import {
@@ -35,7 +35,7 @@ export class TransactionUtils {
     if (!programIds.length) return {};
 
     for (const programId of programIds) {
-      const dexProgram = Object.values(DEX_PROGRAMS).find((dex) => dex.id === programId);
+      const dexProgram = DEX_PROGRAMS_MAP.get(programId);
       if (dexProgram) {
         const isRoute = !dexProgram.tags.includes('amm');
         return {
@@ -46,7 +46,9 @@ export class TransactionUtils {
       }
     }
 
-    return { programId: programIds[0] };
+    // Fallback if no known DEX program ID is found first in the list of all program IDs
+    // This might happen if a tx involves a new/unknown DEX or primarily non-DEX programs
+    return { programId: programIds[0] }; 
   }
 
   /**
@@ -218,10 +220,7 @@ export class TransactionUtils {
    * Check if program should be ignored for grouping
    */
   isIgnoredProgram(programId: string): boolean {
-    return Object.values(DEX_PROGRAMS)
-      .filter((it) => it.tags.includes('vault'))
-      .map((it) => it.id)
-      .includes(programId);
+    return IGNORED_PROGRAM_IDS_SET.has(programId);
   }
 
   /**
@@ -429,15 +428,42 @@ export class TransactionUtils {
   };
 
   attachTokenTransferInfo = (trade: TradeInfo, transferActions: Record<string, TransferData[]>): TradeInfo => {
-    const inputTransfer = Object.values(transferActions)
-      .flat()
-      .find((it) => it.info.mint == trade.inputToken.mint && it.info.tokenAmount?.amount == trade.inputToken.amountRaw);
+    // Construct the potential groupKey using the trade's programId and instruction index (idx)
+    // trade.idx should correspond to the instruction scope where the core swap transfers happened.
+    const groupKey = `${trade.programId}:${trade.idx}`;
+    const relevantTransfers = transferActions[groupKey] || [];
 
-    const outputTransfer = Object.values(transferActions)
-      .flat()
-      .find(
-        (it) => it.info.mint == trade.outputToken.mint && it.info.tokenAmount?.amount == trade.outputToken.amountRaw
-      );
+    // If direct groupKey doesn't yield results (e.g. for complex routing or slight mismatches in keying),
+    // we might need a fallback or a slightly more nuanced way to get the relevant transfers.
+    // For now, prioritize the direct key lookup. As a simple fallback, we can use all transfers from that programId.
+    let searchSpace: TransferData[] = relevantTransfers;
+
+    if (relevantTransfers.length === 0) {
+      // Fallback: try finding transfers associated only with the programId, across all its instruction indices
+      // This is less precise but better than flattening everything.
+      const programSpecificTransfers: TransferData[] = [];
+      for (const key in transferActions) {
+        if (key.startsWith(trade.programId + ":")) {
+          programSpecificTransfers.push(...transferActions[key]);
+        }
+      }
+      if (programSpecificTransfers.length > 0) {
+        searchSpace = programSpecificTransfers;
+      } else {
+        // Ultimate fallback to the old method if no targeted transfers are found.
+        // This should be rare if trade.programId and trade.idx are correctly populated.
+        // console.warn(`Using fallback search for attachTokenTransferInfo for trade ${trade.signature} - ${trade.idx}`);
+        searchSpace = Object.values(transferActions).flat();
+      }
+    }
+    
+    const inputTransfer = searchSpace.find(
+      (it) => it.info.mint == trade.inputToken.mint && it.info.tokenAmount?.amount == trade.inputToken.amountRaw
+    );
+
+    const outputTransfer = searchSpace.find(
+      (it) => it.info.mint == trade.outputToken.mint && it.info.tokenAmount?.amount == trade.outputToken.amountRaw
+    );
 
     if (inputTransfer) {
       trade.inputToken.authority = inputTransfer.info.authority;
